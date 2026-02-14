@@ -14,7 +14,7 @@ export default function FamilyChat() {
   const [userName, setUserName] = useState("");
   const [hasSetName, setHasSetName] = useState(false);
 
-  // 1. Load messages and setup Realtime listener
+  // 1. Load messages and setup Realtime listener (Insert & Delete)
   useEffect(() => {
     const savedName = localStorage.getItem("family-chat-name");
     if (savedName) {
@@ -22,13 +22,13 @@ export default function FamilyChat() {
       setHasSetName(true);
     }
 
-  const fetchMessages = async () => {
-  const { data } = await supabase
-    .from("messages")
-    .select("*")
-    .order("created_at", { ascending: true }); // This keeps oldest at top, newest at bottom
-  if (data) setMessages(data);
-};
+    const fetchMessages = async () => {
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (data) setMessages(data);
+    };
 
     fetchMessages();
 
@@ -36,6 +36,9 @@ export default function FamilyChat() {
       .channel("chat-room")
       .on("postgres_changes", { event: "INSERT", table: "messages" }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
+      })
+      .on("postgres_changes", { event: "DELETE", table: "messages" }, (payload) => {
+        setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .subscribe();
 
@@ -58,11 +61,9 @@ export default function FamilyChat() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Create unique filename
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
 
-    // Upload to 'chat-images' bucket
     const { data, error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, file);
@@ -72,15 +73,32 @@ export default function FamilyChat() {
       return;
     }
 
-    // Get Public URL
     const { data: urlData } = supabase.storage
       .from('chat-images')
       .getPublicUrl(fileName);
 
-    // Insert into database
     await supabase.from('messages').insert([
       { user_name: userName, image_url: urlData.publicUrl, content: "" }
     ]);
+  };
+
+  // 4. Function to delete messages
+  const deleteMessage = async (id, msgUserName) => {
+    if (msgUserName !== userName) {
+      alert("You can only delete your own messages!");
+      return;
+    }
+
+    const confirmDelete = window.confirm("Delete this message?");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("id", id);
+
+    if (error) alert("Error deleting: " + error.message);
+    // Realtime listener handles the UI update for us!
   };
 
   // LOGIN SCREEN
@@ -115,38 +133,54 @@ export default function FamilyChat() {
   // MAIN CHAT SCREEN
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl">
-      <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center">
+      <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
         <span>Family Chat</span>
-        <span className="text-xs opacity-80">Logged in as {userName}</span>
+        <span className="text-xs opacity-80">Hello, {userName}</span>
       </header>
 
       {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex flex-col ${msg.user_name === userName ? 'items-end' : 'items-start'}`}>
-            <span className="text-[10px] text-gray-400 mb-1 px-1">
-              {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-            
+            <div className="flex items-center gap-2 mb-1 px-1">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+                {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              {msg.user_name === userName && (
+                <button 
+                  onClick={() => deleteMessage(msg.id, msg.user_name)}
+                  className="text-[10px] opacity-40 hover:opacity-100 hover:text-red-500 transition-all"
+                >
+                  🗑️
+                </button>
+              )}
+            </div>
+
             {msg.content && (
-              <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${msg.user_name === userName ? 'bg-blue-600 text-white' : 'bg-white text-black border'}`}>
+              <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${
+                msg.user_name === userName 
+                ? 'bg-blue-600 text-white rounded-tr-none' 
+                : 'bg-white text-black border rounded-tl-none'
+              }`}>
                 {msg.content}
               </div>
             )}
 
             {msg.image_url && (
-              <img 
-                src={msg.image_url} 
-                alt="Shared" 
-                className="mt-1 rounded-xl max-w-[250px] border shadow-sm" 
-              />
+              <div className="mt-1">
+                <img 
+                  src={msg.image_url} 
+                  alt="Shared" 
+                  className="rounded-xl max-w-[250px] border shadow-md hover:scale-[1.02] transition-transform" 
+                />
+              </div>
             )}
           </div>
         ))}
       </div>
 
       {/* Input Bar */}
-      <form onSubmit={sendMessage} className="p-4 border-t flex items-center gap-2 bg-white">
+      <form onSubmit={sendMessage} className="p-4 border-t flex items-center gap-3 bg-white">
         <input 
           type="file" 
           accept="image/*" 
@@ -154,18 +188,21 @@ export default function FamilyChat() {
           className="hidden" 
           id="image-upload" 
         />
-        <label htmlFor="image-upload" className="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition-all border border-gray-200">
+        <label htmlFor="image-upload" className="cursor-pointer p-2 hover:bg-gray-100 rounded-full border border-gray-100 shadow-sm transition-all">
           <span className="text-xl">📸</span>
         </label>
 
         <input 
-          className="flex-1 border rounded-full px-4 py-2 text-black outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+          className="flex-1 border rounded-full px-5 py-2.5 text-black outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 transition-all"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
         />
-        <button type="submit" className="bg-blue-600 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center font-bold">
-          →
+        <button 
+          type="submit" 
+          className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-transform active:scale-95"
+        >
+          <span className="text-lg font-bold">→</span>
         </button>
       </form>
     </div>
