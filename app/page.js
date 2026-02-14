@@ -16,7 +16,7 @@ export default function FamilyChat() {
   const messagesEndRef = useRef(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // 1. Load messages and setup Realtime listener (INSERT, DELETE, and UPDATE)
+  // 1. Load messages and setup Realtime listener
   useEffect(() => {
     const savedName = localStorage.getItem("family-chat-name");
     if (savedName) {
@@ -47,7 +47,6 @@ export default function FamilyChat() {
       .on("postgres_changes", { event: "DELETE", table: "messages" }, (payload) => {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
-      // FIXED: Added UPDATE listener so reactions show up in real-time
       .on("postgres_changes", { event: "UPDATE", table: "messages" }, (payload) => {
         setMessages((prev) => 
           prev.map((msg) => (msg.id === payload.new.id ? payload.new : msg))
@@ -105,42 +104,23 @@ export default function FamilyChat() {
   const addReaction = async (messageId, emoji) => {
     const message = messages.find(m => m.id === messageId);
     const currentReactions = message.reactions || {};
-    
-    const newReactions = {
-      ...currentReactions,
-      [emoji]: (currentReactions[emoji] || 0) + 1
-    };
+    const newReactions = { ...currentReactions, [emoji]: (currentReactions[emoji] || 0) + 1 };
 
-    const { error } = await supabase
-      .from("messages")
-      .update({ reactions: newReactions })
-      .eq("id", messageId);
-
-    if (error) console.error("Error adding reaction:", error.message);
+    await supabase.from("messages").update({ reactions: newReactions }).eq("id", messageId);
   };
-// 6. Admin Only: Clear all messages
+
+  // 6. Admin Only: Clear all messages
   const clearChat = async () => {
-    if (userName !== "milan_AdMod86") { // Change this to your name!
+    if (userName !== "milan_AdMod86") {
       alert("Only the Admin can clear the chat.");
       return;
     }
-
-    const confirmClear = window.confirm("Are you sure? This will delete ALL messages for everyone forever.");
-    if (!confirmClear) return;
-
-    const { error } = await supabase
-      .from("messages")
-      .delete()
-      .neq("id", 0); // This is a trick to delete all rows
-
-    if (error) {
-      alert("Error clearing chat: " + error.message);
-    } else {
-      setMessages([]); // Clear local state immediately
-    }
+    if (!window.confirm("Delete ALL messages forever?")) return;
+    await supabase.from("messages").delete().neq("id", 0);
+    setMessages([]);
   };
 
-// 7. Logout function
+  // 7. Logout function
   const logout = () => {
     if (window.confirm("Are you sure you want to log out?")) {
       localStorage.removeItem("family-chat-name");
@@ -149,14 +129,13 @@ export default function FamilyChat() {
     }
   };
 
-  // UI Effect: Preventing "Background Scroll"
+  // UI Effects
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.body.style.overflow = selectedImage ? "hidden" : "auto";
     }
   }, [selectedImage]);
 
-  // UI Effect: Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -173,6 +152,12 @@ export default function FamilyChat() {
             placeholder="e.g. Mom, Dad"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && userName.trim()) {
+                localStorage.setItem("family-chat-name", userName);
+                setHasSetName(true);
+              }
+            }}
           />
           <button 
             onClick={() => {
@@ -196,20 +181,12 @@ export default function FamilyChat() {
       <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
         <div className="flex flex-col">
           <span>Family Chat</span>
-          <button 
-            onClick={logout}
-            className="text-[10px] opacity-70 font-normal hover:underline text-left"
-          >
+          <button onClick={logout} className="text-[10px] opacity-70 font-normal hover:underline text-left">
             Log out ({userName})
           </button>
         </div>
-        
-        {/* Admin Clear Button */}
         {userName === "milan_AdMod86" && (
-          <button 
-            onClick={clearChat}
-            className="text-[10px] bg-red-500 hover:bg-red-600 px-3 py-1 rounded-md transition-colors uppercase tracking-wider"
-          >
+          <button onClick={clearChat} className="text-[10px] bg-red-500 hover:bg-red-600 px-3 py-1 rounded-md transition-colors uppercase tracking-wider">
             Clear All
           </button>
         )}
@@ -227,36 +204,21 @@ export default function FamilyChat() {
                 <button onClick={() => deleteMessage(msg.id, msg.user_name)} className="text-[10px] opacity-40 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button>
               )}
             </div>
-
             {msg.content && (
               <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${msg.user_name === userName ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-black border rounded-tl-none'}`}>
                 {msg.content}
               </div>
             )}
-
             {msg.image_url && (
               <div className="mt-1">
-                <img 
-                  src={msg.image_url} 
-                  alt="Shared" 
-                  onClick={() => setSelectedImage(msg.image_url)}
-                  className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all duration-300 hover:opacity-90" 
-                />
+                <img src={msg.image_url} alt="Shared" onClick={() => setSelectedImage(msg.image_url)} className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all duration-300 hover:opacity-90" />
               </div>
             )}
-
-            {/* Reactions UI */}
             <div className={`flex flex-wrap gap-1 mt-1.5 ${msg.user_name === userName ? 'justify-end' : 'justify-start'}`}>
               {['❤️', '👍', '😂', '😮'].map((emoji) => {
                 const count = msg.reactions?.[emoji] || 0;
                 return (
-                  <button
-                    key={emoji}
-                    onClick={() => addReaction(msg.id, emoji)}
-                    className={`px-2 py-0.5 rounded-full text-xs transition-all active:scale-75 flex items-center gap-1 border shadow-sm ${
-                      count > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-100 text-gray-400 opacity-60 hover:opacity-100'
-                    }`}
-                  >
+                  <button key={emoji} onClick={() => addReaction(msg.id, emoji)} className={`px-2 py-0.5 rounded-full text-xs transition-all active:scale-75 flex items-center gap-1 border shadow-sm ${count > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-100 text-gray-400 opacity-60 hover:opacity-100'}`}>
                     <span>{emoji}</span>
                     {count > 0 && <span className="font-bold">{count}</span>}
                   </button>
@@ -268,39 +230,26 @@ export default function FamilyChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
+      {/* Input Bar - FIXED */}
       <form onSubmit={sendMessage} className="p-4 border-t flex items-center gap-3 bg-white">
         <input type="file" accept="image/*" onChange={uploadImage} className="hidden" id="image-upload" />
         <label htmlFor="image-upload" className="cursor-pointer p-2 hover:bg-gray-100 rounded-full border border-gray-100 shadow-sm transition-all">
           <span className="text-xl">📸</span>
         </label>
         <input 
-          className="border-2 border-gray-200 p-3 rounded-xl w-full mb-4 text-black outline-none focus:border-blue-500"
-            placeholder="e.g. Mom, Dad"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-          onKeyDown={(e) => {
-              if (e.key === 'Enter' && userName.trim()) {
-                localStorage.setItem("family-chat-name", userName);
-                setHasSetName(true);
-              }
-            }}
+          className="flex-1 border rounded-full px-5 py-2.5 text-black outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-all"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message..."
         />
         <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-transform active:scale-95">→</button>
       </form>
 
-      {/* FULL SCREEN ZOOM OVERLAY */}
+      {/* Full Screen Overlay */}
       {selectedImage && (
-        <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setSelectedImage(null)}
-        >
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setSelectedImage(null)}>
           <button className="absolute top-6 right-6 text-white text-4xl">×</button>
-          <img 
-            src={selectedImage} 
-            className="max-w-full max-h-full rounded-md shadow-2xl transition-all duration-300 scale-100"
-            alt="Full size" 
-          />
+          <img src={selectedImage} className="max-w-full max-h-full rounded-md shadow-2xl transition-all duration-300 scale-100" alt="Full size" />
         </div>
       )}
     </div>
