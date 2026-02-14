@@ -135,32 +135,31 @@ if (!hasSetName) {
       <h1 className="text-2xl font-bold mb-4 text-blue-600">Family Chat</h1>
       
       <div className="h-96 border rounded-xl p-4 overflow-y-auto mb-4 bg-gray-100 flex flex-col gap-3">
-  {messages.map((msg) => (
-        <div key={msg.id} className={`mb-4 ${msg.user_name === userName ? 'text-right' : 'text-left'}`}>
-          <span className="font-bold text-xs block text-gray-600 mb-1">
-            {msg.user_name}
-          </span>
-          
-          {/* Text bubble */}
-          {msg.content && (
-            <p className="bg-blue-100 p-2 rounded-lg inline-block text-black">
-              {msg.content}
-            </p>
-          )}
+{messages.map((msg) => (
+  <div key={msg.id} className={`mb-4 ${msg.user_name === userName ? 'text-right' : 'text-left'}`}>
+    <div className="flex flex-col">
+      <span className="font-bold text-xs text-gray-600">
+        {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </span>
+      
+      {msg.content && (
+        <p className="bg-blue-100 p-2 rounded-lg inline-block text-black mt-1 self-start">
+          {msg.content}
+        </p>
+      )}
 
-          {/* Image bubble */}
-          {msg.image_url && (
-            <div className="mt-2">
-              <img 
-                src={msg.image_url} 
-                alt="Shared" 
-                className="rounded-xl max-w-xs shadow-md border inline-block" 
-              />
-            </div>
-          )}
+      {msg.image_url && (
+        <div className="mt-2">
+          <img 
+            src={msg.image_url} 
+            alt="Shared" 
+            className="rounded-xl max-w-xs shadow-md border inline-block" 
+          />
         </div>
-      ))}
-  
+      )}
+    </div>
+  </div>
+))}
 </div>
 
       <form onSubmit={sendMessage} className="flex gap-2">
