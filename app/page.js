@@ -118,7 +118,27 @@ export default function FamilyChat() {
 
     if (error) console.error("Error adding reaction:", error.message);
   };
+// 6. Admin Only: Clear all messages
+  const clearChat = async () => {
+    if (userName !== "milan_AdMod86") { // Change this to your name!
+      alert("Only the Admin can clear the chat.");
+      return;
+    }
 
+    const confirmClear = window.confirm("Are you sure? This will delete ALL messages for everyone forever.");
+    if (!confirmClear) return;
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .neq("id", 0); // This is a trick to delete all rows
+
+    if (error) {
+      alert("Error clearing chat: " + error.message);
+    } else {
+      setMessages([]); // Clear local state immediately
+    }
+  };
   // UI Effect: Preventing "Background Scroll"
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -163,9 +183,21 @@ export default function FamilyChat() {
   // MAIN CHAT SCREEN
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl relative">
-      <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
-        <span>Family Chat</span>
-        <span className="text-xs opacity-80">Hello, {userName}</span>
+<header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
+        <div className="flex flex-col">
+          <span>Family Chat</span>
+          <span className="text-[10px] opacity-70 font-normal">Hello, {userName}</span>
+        </div>
+        
+        {/* Only show the clear button if the user is the Admin */}
+        {userName === "YourName" && ( // Change this to match your name!
+          <button 
+            onClick={clearChat}
+            className="text-[10px] bg-red-500 hover:bg-red-600 px-3 py-1 rounded-md transition-colors uppercase tracking-wider"
+          >
+            Clear All
+          </button>
+        )}
       </header>
 
       {/* Message List */}
