@@ -171,6 +171,7 @@ export default function FamilyChat() {
                 <img 
                   src={msg.image_url} 
                   alt="Shared" 
+                  onClick={() => setSelectedImage(msg.image_url)}
                   className="rounded-xl max-w-[250px] border shadow-md hover:scale-[1.02] transition-transform" 
                 />
               </div>
