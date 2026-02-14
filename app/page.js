@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 // CHANGE THIS to your exact name to see the Admin Button
-const ADMIN_NAME = "Dad"; 
+const ADMIN_NAME = "milan_AdMod86"; 
 
 export default function FamilyChat() {
   const [messages, setMessages] = useState([]);
