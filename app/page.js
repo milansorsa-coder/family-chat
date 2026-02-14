@@ -17,6 +17,7 @@ export default function FamilyChat() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [password, setPassword] = useState("");
   const [hasAuthorized, setHasAuthorized] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
 
   // 1. Load messages and setup Realtime listener
@@ -42,8 +43,16 @@ export default function FamilyChat() {
     };
     window.addEventListener('keydown', handleEsc);
 
-    const channel = supabase
-      .channel("chat-room")
+
+    const channel = supabase.channel("chat-room", {
+      config: { presence: { key: userName } } // Tells Supabase who WE are
+    });
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        // Extract the keys (usernames) from the presence state
+        setOnlineUsers(Object.keys(state));
+      })
       .on("postgres_changes", { event: "INSERT", table: "messages" }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
       })
@@ -55,7 +64,12 @@ export default function FamilyChat() {
           prev.map((msg) => (msg.id === payload.new.id ? payload.new : msg))
         );
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && userName) {
+          // Send our status to everyone else
+          await channel.track({ online_at: new Date().toISOString() });
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -239,7 +253,11 @@ const handleAuth = async (e) => {
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl relative">
       <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
         <div className="flex flex-col">
-          <span>Family Chat</span>
+          <div className="flex items-center gap-2">
+            <span>Family Chat</span>
+            {/* Pulsing Green Dot */}
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+          </div>
           <button onClick={logout} className="text-[10px] opacity-70 font-normal hover:underline text-left">
             Log out ({userName})
           </button>
@@ -250,7 +268,28 @@ const handleAuth = async (e) => {
           </button>
         )}
       </header>
-
+{/* Online Users Indicator */}
+      <div className="bg-white border-b px-4 py-2 flex items-center gap-3 overflow-x-auto no-scrollbar">
+        <div className="flex -space-x-2">
+          {onlineUsers.map((user) => (
+            <div 
+              key={user} 
+              title={user}
+              className="w-8 h-8 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white uppercase shadow-sm"
+            >
+              {user.charAt(0)}
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+            Online Now
+          </span>
+          <span className="text-[11px] text-blue-600 font-medium">
+            {onlineUsers.length} {onlineUsers.length === 1 ? 'person' : 'people'} active
+          </span>
+        </div>
+      </div>
       {/* Message List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50">
         {messages.map((msg) => (
