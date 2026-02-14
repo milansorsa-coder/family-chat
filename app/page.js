@@ -35,6 +35,11 @@ export default function FamilyChat() {
 
     fetchMessages();
 
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') setSelectedImage(null);
+    };
+    window.addEventListener('keydown', handleEsc);
+
     const channel = supabase
       .channel("chat-room")
       .on("postgres_changes", { event: "INSERT", table: "messages" }, (payload) => {
@@ -45,7 +50,10 @@ export default function FamilyChat() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('keydown', handleEsc);
+    };
   }, []);
 
   // 2. Function to send text messages
@@ -87,6 +95,18 @@ export default function FamilyChat() {
     if (!window.confirm("Delete this message?")) return;
     await supabase.from("messages").delete().eq("id", id);
   };
+// NEW STABLE SCROLL LOGIC
+  useEffect(() => {
+    // We check for 'document' to prevent errors during Next.js server-side rendering
+    if (typeof document !== "undefined") {
+      if (selectedImage) {
+        document.body.style.overflow = "hidden";
+      } else {
+        document.body.style.overflow = "auto";
+      }
+    }
+  }, [selectedImage]); // <--- This means: "Run this code every time selectedImage changes"
+
 
   // LOGIN SCREEN
   if (!hasSetName) {
@@ -151,7 +171,7 @@ export default function FamilyChat() {
                   alt="Shared" 
                   onClick={() => setSelectedImage(msg.image_url)}
                   // Small image gets zoom-in cursor (+) and slight growth
-                  className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all hover:opacity-90" 
+                  className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all duration-300 hover:opacity-90" 
                 />
               </div>
             )}
