@@ -57,33 +57,54 @@ e.preventDefault();
     if (!error) setInput("");
   };
 const uploadImage = async (e) => {
+  try {
     const file = e.target.files[0];
     if (!file) return;
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `${fileName}`;
+    console.log("Starting upload for:", file.name);
 
-    const { error: uploadError } = await supabase.storage
+    // 1. Create a unique file name
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`; // Using timestamp for uniqueness
+
+    // 2. Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('chat-images')
-      .upload(filePath, file);
+      .upload(fileName, file);
 
     if (uploadError) {
-      console.error(uploadError);
+      console.error("Upload Error Details:", uploadError.message);
+      alert("Upload failed: " + uploadError.message);
       return;
     }
 
-    const { data } = supabase.storage
-      .from('chat-images')
-      .getPublicUrl(filePath);
+    console.log("Upload successful, getting URL...");
 
-    await supabase.from('messages').insert([
+    // 3. Get the public URL
+    const { data: urlData } = supabase.storage
+      .from('chat-images')
+      .getPublicUrl(fileName);
+
+    console.log("Public URL created:", urlData.publicUrl);
+
+    // 4. Save to Database
+    const { error: dbError } = await supabase.from('messages').insert([
       { 
         user_name: userName, 
-        image_url: data.publicUrl 
+        image_url: urlData.publicUrl,
+        content: "" // We send an empty string so the record is valid
       }
     ]);
-  };
+
+    if (dbError) {
+      console.error("Database Error:", dbError.message);
+      alert("Database save failed: " + dbError.message);
+    }
+
+  } catch (err) {
+    console.error("Unexpected Error:", err);
+  }
+};
 if (!hasSetName) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
