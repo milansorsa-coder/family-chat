@@ -1,51 +1,55 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import WebPush from "https://esm.sh/web-push@3.6.6"
-
-const PUBLIC_VAPID = Deno.env.get('VAPID_PUBLIC_KEY')!;
-const PRIVATE_VAPID = Deno.env.get('VAPID_PRIVATE_KEY')!;
-
-WebPush.setVapidDetails(
-  'mailto:milan.sorsa@gmail.com',
-  PUBLIC_VAPID,
-  PRIVATE_VAPID
-);
+// Switching to the NPM specifier which uses a different bundling path
+import webpush from "npm:web-push@3.6.6"
 
 serve(async (req) => {
-  const { record } = await req.json(); // The new message from the database webhook
+  try {
+    const { record } = await req.json()
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-  // 1. Initialize Supabase
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
+    const { data: subs } = await supabase
+      .from('push_subscriptions')
+      .select('*')
 
-// 2. Get all subscriptions (except the sender)
-const { data: subs, error } = await supabase
-  .from('push_subscriptions')
-  .select('subscription_data')
-  .neq('user_name', record.user_name);
+    const vapidKeys = {
+      publicKey: Deno.env.get('VAPID_PUBLIC_KEY') ?? '',
+      privateKey: Deno.env.get('VAPID_PRIVATE_KEY') ?? '',
+      subject: 'mailto:milan.sorsa@gmail.com'
+    }
 
-// Add this safety check!
-if (error || !subs || !Array.isArray(subs)) {
-  console.error("No subscriptions found or error fetching:", error);
-  return new Response(JSON.stringify({ message: "No subscribers" }), { status: 200 });
-}
+    const notifications = (subs || []).map(async (sub) => {
+      try {
+        const pushConfig = typeof sub.subscription_data === 'string' 
+          ? JSON.parse(sub.subscription_data) 
+          : sub.subscription_data
 
-// 3. Send notifications
-const pushPromises = subs.map((sub: any) => {
-  return WebPush.sendNotification(
-    sub.subscription_data,
-    JSON.stringify({
-      title: `New Message from ${record.user_name}`,
-      message: record.content || "Sent an image 📸",
+        // Using the default export from the npm package
+        return await webpush.sendNotification(
+          pushConfig,
+          JSON.stringify({
+            title: `Message from ${record.user_name || 'Family'}`,
+            body: record.content || 'New update!',
+          }),
+          { vapidDetails: vapidKeys }
+        )
+      } catch (e) {
+        console.error("Push failed for one user:", e.message)
+      }
     })
-  ).catch(err => console.error("Push failed for one user:", err));
-});
 
-  await Promise.allSettled(pushPromises || []);
+    await Promise.all(notifications)
 
-  return new Response(JSON.stringify({ done: true }), { 
-    headers: { "Content-Type": "application/json" } 
-  });
-});
+    return new Response(JSON.stringify({ success: true }), { 
+      status: 200,
+      headers: { "Content-Type": "application/json" } 
+    })
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 })
+  }
+})
