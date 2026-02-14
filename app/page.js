@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase
@@ -13,7 +13,7 @@ export default function FamilyChat() {
   const [input, setInput] = useState("");
   const [userName, setUserName] = useState("");
   const [hasSetName, setHasSetName] = useState(false);
-  
+  const messagesEndRef = useRef(null);
   // State for the Image Zoom
   const [selectedImage, setSelectedImage] = useState(null);
 
@@ -107,6 +107,15 @@ export default function FamilyChat() {
     }
   }, [selectedImage]); // <--- This means: "Run this code every time selectedImage changes"
 
+// 1. Function to scroll to the bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // 2. Trigger scroll every time messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // LOGIN SCREEN
   if (!hasSetName) {
@@ -177,6 +186,8 @@ export default function FamilyChat() {
             )}
           </div>
         ))}
+
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Bar */}
