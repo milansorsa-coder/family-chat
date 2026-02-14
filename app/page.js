@@ -1,139 +1,100 @@
-"use client"; // This is required in Next.js for real-time features!
+"use client";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-import { useEffect, useState, useRef } from 'react';
-import { supabase } from '@/utils/supabaseClient'; // This uses the hub we made
+// Initialize Supabase
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-
-export default function ChatPage() {
+export default function FamilyChat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-const [userName, setUserName] = useState("");
-const [hasSetName, setHasSetName] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [hasSetName, setHasSetName] = useState(false);
 
-// This checks if they already saved a name on this computer/phone
-useEffect(() => {
-  const savedName = localStorage.getItem("family-chat-name");
-  if (savedName) {
-    setUserName(savedName);
-    setHasSetName(true);
-  }
-}, []);
-const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // 1. Load messages and setup Realtime listener
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const savedName = localStorage.getItem("family-chat-name");
+    if (savedName) {
+      setUserName(savedName);
+      setHasSetName(true);
+    }
 
-  useEffect(() => {
-    // 1. Listen for new messages
+    const fetchMessages = async () => {
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (data) setMessages(data);
+    };
+
+    fetchMessages();
+
     const channel = supabase
-      .channel('family-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, 
-          payload => setMessages(current => [...current, payload.new]))
+      .channel("chat-room")
+      .on("postgres_changes", { event: "INSERT", table: "messages" }, (payload) => {
+        setMessages((prev) => [...prev, payload.new]);
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
+  // 2. Function to send text messages
   const sendMessage = async (e) => {
-e.preventDefault();
-    if (!input.trim()) return; // Don't send empty messages
+    e?.preventDefault();
+    if (!input.trim()) return;
 
-    // --- UPDATE THIS SECTION ---
-    const { error } = await supabase
-      .from('messages')
-      .insert([
-        { 
-          content: input, 
-          user_name: userName // This now uses the name the user typed in!
-        }
-      ]);
-    // ---------------------------
-
-    if (!error) setInput("");
+    await supabase.from("messages").insert([
+      { content: input, user_name: userName }
+    ]);
+    setInput("");
   };
-const uploadImage = async (e) => {
-  try {
+
+  // 3. Function to upload images
+  const uploadImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    console.log("Starting upload for:", file.name);
-
-    // 1. Create a unique file name
+    // Create unique filename
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`; // Using timestamp for uniqueness
+    const fileName = `${Date.now()}.${fileExt}`;
 
-    // 2. Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // Upload to 'chat-images' bucket
+    const { data, error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, file);
 
-    if (uploadError) {
-      console.error("Upload Error Details:", uploadError.message);
-      alert("Upload failed: " + uploadError.message);
+    if (error) {
+      alert("Error uploading: " + error.message);
       return;
     }
 
-    console.log("Upload successful, getting URL...");
-
-    // 3. Get the public URL
+    // Get Public URL
     const { data: urlData } = supabase.storage
       .from('chat-images')
       .getPublicUrl(fileName);
 
-    console.log("Public URL created:", urlData.publicUrl);
-
-    // 4. Save to Database
-    const { error: dbError } = await supabase.from('messages').insert([
-      { 
-        user_name: userName, 
-        image_url: urlData.publicUrl,
-        content: "" // We send an empty string so the record is valid
-      }
+    // Insert into database
+    await supabase.from('messages').insert([
+      { user_name: userName, image_url: urlData.publicUrl, content: "" }
     ]);
+  };
 
-    if (dbError) {
-      console.error("Database Error:", dbError.message);
-      alert("Database save failed: " + dbError.message);
-    }
-
-  } catch (err) {
-    console.error("Unexpected Error:", err);
-  }
-};
-if (!hasSetName) {
+  // LOGIN SCREEN
+  if (!hasSetName) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center border">
           <h1 className="text-3xl font-extrabold mb-2 text-blue-600">Family Hub</h1>
-          <p className="text-gray-500 mb-6 text-sm">Enter your name to join the family chat</p>
-          
-          {/* 1. The Hidden File Picker */}
-  <input 
-    type="file" 
-    accept="image/*" 
-    onChange={uploadImage} 
-    className="hidden" 
-    id="image-upload" 
-  />
-  
-  {/* 2. The Camera Button (Clicking this triggers the hidden input) */}
-  <label 
-    htmlFor="image-upload" 
-    className="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition-colors"
-  >
-    <span className="text-2xl">📸</span>
-  </label>
+          <p className="text-gray-500 mb-6 text-sm">Enter your name to join</p>
           <input 
-            className="border-2 border-gray-200 p-3 rounded-xl w-full mb-4 text-black focus:border-blue-500 outline-none transition-all"
-            placeholder="e.g. Mom, Uncle Joe"
+            className="border-2 border-gray-200 p-3 rounded-xl w-full mb-4 text-black outline-none focus:border-blue-500"
+            placeholder="e.g. Mom, Dad"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && userName.trim() && (localStorage.setItem("family-chat-name", userName), setHasSetName(true))}
           />
           <button 
             onClick={() => {
@@ -142,7 +103,7 @@ if (!hasSetName) {
                 setHasSetName(true);
               }
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl w-full transition-colors shadow-lg"
+            className="bg-blue-600 text-white font-bold py-3 rounded-xl w-full shadow-lg"
           >
             Join Chat
           </button>
@@ -151,46 +112,61 @@ if (!hasSetName) {
     );
   }
 
+  // MAIN CHAT SCREEN
   return (
-    <div className="p-10 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-4 text-blue-600">Family Chat</h1>
-      
-      <div className="h-96 border rounded-xl p-4 overflow-y-auto mb-4 bg-gray-100 flex flex-col gap-3">
-{messages.map((msg) => (
-  <div key={msg.id} className={`mb-4 ${msg.user_name === userName ? 'text-right' : 'text-left'}`}>
-    <div className="flex flex-col">
-      <span className="font-bold text-xs text-gray-600">
-        {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </span>
-      
-      {msg.content && (
-        <p className="bg-blue-100 p-2 rounded-lg inline-block text-black mt-1 self-start">
-          {msg.content}
-        </p>
-      )}
+    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl">
+      <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center">
+        <span>Family Chat</span>
+        <span className="text-xs opacity-80">Logged in as {userName}</span>
+      </header>
 
-      {msg.image_url && (
-        <div className="mt-2">
-          <img 
-            src={msg.image_url} 
-            alt="Shared" 
-            className="rounded-xl max-w-xs shadow-md border inline-block" 
-          />
-        </div>
-      )}
-    </div>
-  </div>
-))}
-</div>
+      {/* Message List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex flex-col ${msg.user_name === userName ? 'items-end' : 'items-start'}`}>
+            <span className="text-[10px] text-gray-400 mb-1 px-1">
+              {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            
+            {msg.content && (
+              <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${msg.user_name === userName ? 'bg-blue-600 text-white' : 'bg-white text-black border'}`}>
+                {msg.content}
+              </div>
+            )}
 
-      <form onSubmit={sendMessage} className="flex gap-2">
+            {msg.image_url && (
+              <img 
+                src={msg.image_url} 
+                alt="Shared" 
+                className="mt-1 rounded-xl max-w-[250px] border shadow-sm" 
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Input Bar */}
+      <form onSubmit={sendMessage} className="p-4 border-t flex items-center gap-2 bg-white">
         <input 
-          className="border flex-1 p-2 rounded text-black"
+          type="file" 
+          accept="image/*" 
+          onChange={uploadImage} 
+          className="hidden" 
+          id="image-upload" 
+        />
+        <label htmlFor="image-upload" className="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition-all border border-gray-200">
+          <span className="text-xl">📸</span>
+        </label>
+
+        <input 
+          className="flex-1 border rounded-full px-4 py-2 text-black outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
         />
-        <button className="bg-blue-500 text-white px-4 py-2 rounded">Send</button>
+        <button type="submit" className="bg-blue-600 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center font-bold">
+          →
+        </button>
       </form>
     </div>
   );
