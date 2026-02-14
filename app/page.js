@@ -15,6 +15,9 @@ export default function FamilyChat() {
   const [hasSetName, setHasSetName] = useState(false);
   const messagesEndRef = useRef(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [password, setPassword] = useState("");
+  const [hasAuthorized, setHasAuthorized] = useState(false);
+
 
   // 1. Load messages and setup Realtime listener
   useEffect(() => {
@@ -121,11 +124,43 @@ export default function FamilyChat() {
   };
 
   // 7. Logout function
-  const logout = () => {
-    if (window.confirm("Are you sure you want to log out?")) {
+const logout = () => {
+    if (window.confirm("Are you sure you want to log out and lock the app?")) {
+      // Clear the user's name
       localStorage.removeItem("family-chat-name");
       setUserName("");
       setHasSetName(false);
+      
+      // Clear the password authorization
+      localStorage.removeItem("family-auth");
+      setHasAuthorized(false);
+    }
+  };
+// 8. Password protection function
+useEffect(() => {
+    const isAuth = localStorage.getItem("family-auth");
+    if (isAuth === "true") setHasAuthorized(true);
+  }, []);
+
+const handleAuth = async (e) => {
+    e.preventDefault();
+    
+    // We call the 'Remote Procedure Call' we created in Step 1
+    const { data: isValid, error } = await supabase.rpc('verify_family_password', { 
+      input_password: password 
+    });
+
+    if (error) {
+      alert("Connection error: " + error.message);
+      return;
+    }
+
+    if (isValid) {
+      localStorage.setItem("family-auth", "true");
+      setHasAuthorized(true);
+    } else {
+      alert("❌ Incorrect Password");
+      setPassword(""); // Clear the input
     }
   };
 
@@ -140,7 +175,31 @@ export default function FamilyChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // LOGIN SCREEN
+// 1. PASSWORD GATE
+  if (!hasAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-6">
+        <form onSubmit={handleAuth} className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+          <span className="text-4xl mb-4 block">🔐</span>
+          <h1 className="text-2xl font-bold mb-2">Family Vault</h1>
+          <p className="text-gray-500 mb-6">Enter the family password to enter</p>
+          <input 
+            type="password"
+            autoFocus 
+            className="border-2 border-gray-200 p-3 rounded-xl w-full mb-4 text-center outline-none focus:border-blue-500"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button type="submit" className="bg-slate-900 text-white font-bold py-3 rounded-xl w-full">
+            Unlock
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // 2. LOGIN (NAME) SCREEN
   if (!hasSetName) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
