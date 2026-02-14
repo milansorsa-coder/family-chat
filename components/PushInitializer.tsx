@@ -43,11 +43,11 @@ export default function PushInitializer() {
   };
 
   return (
-    <button 
-      onClick={subscribeUser}
-      className="fixed bottom-4 right-4 bg-blue-600 text-white p-3 rounded-full shadow-lg"
-    >
-      🔔 Link App
-    </button>
-  );
+  <button 
+    onClick={subscribeUser}
+    className="fixed bottom-4 right-4 bg-blue-600 text-white p-3 rounded-full shadow-lg"
+  >
+    🔔 Link App
+  </button>
+);
 }
