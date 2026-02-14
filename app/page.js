@@ -139,6 +139,16 @@ export default function FamilyChat() {
       setMessages([]); // Clear local state immediately
     }
   };
+
+// 7. Logout function
+  const logout = () => {
+    if (window.confirm("Are you sure you want to log out?")) {
+      localStorage.removeItem("family-chat-name");
+      setUserName("");
+      setHasSetName(false);
+    }
+  };
+
   // UI Effect: Preventing "Background Scroll"
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -183,14 +193,19 @@ export default function FamilyChat() {
   // MAIN CHAT SCREEN
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl relative">
-<header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
+      <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
         <div className="flex flex-col">
           <span>Family Chat</span>
-          <span className="text-[10px] opacity-70 font-normal">Hello, {userName}</span>
+          <button 
+            onClick={logout}
+            className="text-[10px] opacity-70 font-normal hover:underline text-left"
+          >
+            Log out ({userName})
+          </button>
         </div>
         
-        {/* Only show the clear button if the user is the Admin */}
-        {userName === "YourName" && ( // Change this to match your name!
+        {/* Admin Clear Button */}
+        {userName === "milan_AdMod86" && (
           <button 
             onClick={clearChat}
             className="text-[10px] bg-red-500 hover:bg-red-600 px-3 py-1 rounded-md transition-colors uppercase tracking-wider"
@@ -260,10 +275,16 @@ export default function FamilyChat() {
           <span className="text-xl">📸</span>
         </label>
         <input 
-          className="flex-1 border rounded-full px-5 py-2.5 text-black outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-all"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
+          className="border-2 border-gray-200 p-3 rounded-xl w-full mb-4 text-black outline-none focus:border-blue-500"
+            placeholder="e.g. Mom, Dad"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+          onKeyDown={(e) => {
+              if (e.key === 'Enter' && userName.trim()) {
+                localStorage.setItem("family-chat-name", userName);
+                setHasSetName(true);
+              }
+            }}
         />
         <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-transform active:scale-95">→</button>
       </form>
