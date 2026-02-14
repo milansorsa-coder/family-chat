@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { supabase } from "@/lib/supabase"; // Use your existing supabase client
+import { supabase } from "@/utils/supabaseClient"; // Use your existing supabase client
 
 export default function PushInitializer() {
   useEffect(() => {
