@@ -14,10 +14,9 @@ export default function FamilyChat() {
   const [userName, setUserName] = useState("");
   const [hasSetName, setHasSetName] = useState(false);
   const messagesEndRef = useRef(null);
-  // State for the Image Zoom
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // 1. Load messages and setup Realtime listener
+  // 1. Load messages and setup Realtime listener (INSERT, DELETE, and UPDATE)
   useEffect(() => {
     const savedName = localStorage.getItem("family-chat-name");
     if (savedName) {
@@ -47,6 +46,12 @@ export default function FamilyChat() {
       })
       .on("postgres_changes", { event: "DELETE", table: "messages" }, (payload) => {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
+      })
+      // FIXED: Added UPDATE listener so reactions show up in real-time
+      .on("postgres_changes", { event: "UPDATE", table: "messages" }, (payload) => {
+        setMessages((prev) => 
+          prev.map((msg) => (msg.id === payload.new.id ? payload.new : msg))
+        );
       })
       .subscribe();
 
@@ -95,26 +100,35 @@ export default function FamilyChat() {
     if (!window.confirm("Delete this message?")) return;
     await supabase.from("messages").delete().eq("id", id);
   };
-// NEW STABLE SCROLL LOGIC
-  useEffect(() => {
-    // We check for 'document' to prevent errors during Next.js server-side rendering
-    if (typeof document !== "undefined") {
-      if (selectedImage) {
-        document.body.style.overflow = "hidden";
-      } else {
-        document.body.style.overflow = "auto";
-      }
-    }
-  }, [selectedImage]); // <--- This means: "Run this code every time selectedImage changes"
 
-// 1. Function to scroll to the bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // 5. Function to handle reactions
+  const addReaction = async (messageId, emoji) => {
+    const message = messages.find(m => m.id === messageId);
+    const currentReactions = message.reactions || {};
+    
+    const newReactions = {
+      ...currentReactions,
+      [emoji]: (currentReactions[emoji] || 0) + 1
+    };
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ reactions: newReactions })
+      .eq("id", messageId);
+
+    if (error) console.error("Error adding reaction:", error.message);
   };
 
-  // 2. Trigger scroll every time messages change
+  // UI Effect: Preventing "Background Scroll"
   useEffect(() => {
-    scrollToBottom();
+    if (typeof document !== "undefined") {
+      document.body.style.overflow = selectedImage ? "hidden" : "auto";
+    }
+  }, [selectedImage]);
+
+  // UI Effect: Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // LOGIN SCREEN
@@ -179,14 +193,31 @@ export default function FamilyChat() {
                   src={msg.image_url} 
                   alt="Shared" 
                   onClick={() => setSelectedImage(msg.image_url)}
-                  // Small image gets zoom-in cursor (+) and slight growth
                   className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all duration-300 hover:opacity-90" 
                 />
               </div>
             )}
+
+            {/* Reactions UI */}
+            <div className={`flex flex-wrap gap-1 mt-1.5 ${msg.user_name === userName ? 'justify-end' : 'justify-start'}`}>
+              {['❤️', '👍', '😂', '😮'].map((emoji) => {
+                const count = msg.reactions?.[emoji] || 0;
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => addReaction(msg.id, emoji)}
+                    className={`px-2 py-0.5 rounded-full text-xs transition-all active:scale-75 flex items-center gap-1 border shadow-sm ${
+                      count > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-100 text-gray-400 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    {count > 0 && <span className="font-bold">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ))}
-
         <div ref={messagesEndRef} />
       </div>
 
@@ -208,7 +239,7 @@ export default function FamilyChat() {
       {/* FULL SCREEN ZOOM OVERLAY */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out"
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-zoom-out"
           onClick={() => setSelectedImage(null)}
         >
           <button className="absolute top-6 right-6 text-white text-4xl">×</button>
