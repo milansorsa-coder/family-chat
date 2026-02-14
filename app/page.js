@@ -13,8 +13,11 @@ export default function FamilyChat() {
   const [input, setInput] = useState("");
   const [userName, setUserName] = useState("");
   const [hasSetName, setHasSetName] = useState(false);
+  
+  // State for the Image Zoom
+  const [selectedImage, setSelectedImage] = useState(null);
 
-  // 1. Load messages and setup Realtime listener (Insert & Delete)
+  // 1. Load messages and setup Realtime listener
   useEffect(() => {
     const savedName = localStorage.getItem("family-chat-name");
     if (savedName) {
@@ -49,10 +52,7 @@ export default function FamilyChat() {
   const sendMessage = async (e) => {
     e?.preventDefault();
     if (!input.trim()) return;
-
-    await supabase.from("messages").insert([
-      { content: input, user_name: userName }
-    ]);
+    await supabase.from("messages").insert([{ content: input, user_name: userName }]);
     setInput("");
   };
 
@@ -60,23 +60,19 @@ export default function FamilyChat() {
   const uploadImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
 
-    const { data, error } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('chat-images')
       .upload(fileName, file);
 
-    if (error) {
-      alert("Error uploading: " + error.message);
+    if (uploadError) {
+      alert("Error uploading: " + uploadError.message);
       return;
     }
 
-    const { data: urlData } = supabase.storage
-      .from('chat-images')
-      .getPublicUrl(fileName);
-
+    const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName);
     await supabase.from('messages').insert([
       { user_name: userName, image_url: urlData.publicUrl, content: "" }
     ]);
@@ -88,17 +84,8 @@ export default function FamilyChat() {
       alert("You can only delete your own messages!");
       return;
     }
-
-    const confirmDelete = window.confirm("Delete this message?");
-    if (!confirmDelete) return;
-
-    const { error } = await supabase
-      .from("messages")
-      .delete()
-      .eq("id", id);
-
-    if (error) alert("Error deleting: " + error.message);
-    // Realtime listener handles the UI update for us!
+    if (!window.confirm("Delete this message?")) return;
+    await supabase.from("messages").delete().eq("id", id);
   };
 
   // LOGIN SCREEN
@@ -132,7 +119,7 @@ export default function FamilyChat() {
 
   // MAIN CHAT SCREEN
   return (
-    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl">
+    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white border shadow-2xl relative">
       <header className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center shadow-md z-10">
         <span>Family Chat</span>
         <span className="text-xs opacity-80">Hello, {userName}</span>
@@ -143,25 +130,16 @@ export default function FamilyChat() {
         {messages.map((msg) => (
           <div key={msg.id} className={`flex flex-col ${msg.user_name === userName ? 'items-end' : 'items-start'}`}>
             <div className="flex items-center gap-2 mb-1 px-1">
-              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+              <span className="text-[10px] text-gray-400 uppercase font-medium tracking-wide">
                 {msg.user_name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
               {msg.user_name === userName && (
-                <button 
-                  onClick={() => deleteMessage(msg.id, msg.user_name)}
-                  className="text-[10px] opacity-40 hover:opacity-100 hover:text-red-500 transition-all"
-                >
-                  🗑️
-                </button>
+                <button onClick={() => deleteMessage(msg.id, msg.user_name)} className="text-[10px] opacity-40 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button>
               )}
             </div>
 
             {msg.content && (
-              <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${
-                msg.user_name === userName 
-                ? 'bg-blue-600 text-white rounded-tr-none' 
-                : 'bg-white text-black border rounded-tl-none'
-              }`}>
+              <div className={`p-3 rounded-2xl max-w-xs shadow-sm ${msg.user_name === userName ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-black border rounded-tl-none'}`}>
                 {msg.content}
               </div>
             )}
@@ -172,7 +150,8 @@ export default function FamilyChat() {
                   src={msg.image_url} 
                   alt="Shared" 
                   onClick={() => setSelectedImage(msg.image_url)}
-                  className="rounded-xl max-w-[250px] border shadow-md hover:scale-[1.20] transition-all cursor-zoom-in hover:opacity-80 cursor-zoom-out" 
+                  // Small image gets zoom-in cursor (+) and slight growth
+                  className="rounded-xl max-w-[250px] border shadow-md cursor-zoom-in hover:scale-[1.03] transition-all hover:opacity-90" 
                 />
               </div>
             )}
@@ -182,30 +161,33 @@ export default function FamilyChat() {
 
       {/* Input Bar */}
       <form onSubmit={sendMessage} className="p-4 border-t flex items-center gap-3 bg-white">
-        <input 
-          type="file" 
-          accept="image/*" 
-          onChange={uploadImage} 
-          className="hidden" 
-          id="image-upload" 
-        />
+        <input type="file" accept="image/*" onChange={uploadImage} className="hidden" id="image-upload" />
         <label htmlFor="image-upload" className="cursor-pointer p-2 hover:bg-gray-100 rounded-full border border-gray-100 shadow-sm transition-all">
           <span className="text-xl">📸</span>
         </label>
-
         <input 
-          className="flex-1 border rounded-full px-5 py-2.5 text-black outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 transition-all"
+          className="flex-1 border rounded-full px-5 py-2.5 text-black outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-all"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
         />
-        <button 
-          type="submit" 
-          className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-transform active:scale-95"
-        >
-          <span className="text-lg font-bold">→</span>
-        </button>
+        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-transform active:scale-95">→</button>
       </form>
+
+      {/* FULL SCREEN ZOOM OVERLAY */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button className="absolute top-6 right-6 text-white text-4xl">×</button>
+          <img 
+            src={selectedImage} 
+            className="max-w-full max-h-full rounded-md shadow-2xl transition-all duration-300 scale-100"
+            alt="Full size" 
+          />
+        </div>
+      )}
     </div>
   );
 }
