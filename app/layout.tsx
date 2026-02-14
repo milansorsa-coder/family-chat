@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import PushInitializer from "@/components/PushInitializer";
+import React from "react"; // Ensure React is imported
 
 export const metadata: Metadata = {
   title: "Family Hub",
@@ -7,11 +9,13 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+
+
+export default function RootLayout({ 
+  children 
+}: { 
+  children: React.ReactNode 
+}) {
   return (
     <html lang="en">
       <body className="antialiased">
