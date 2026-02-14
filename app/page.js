@@ -22,13 +22,13 @@ export default function FamilyChat() {
       setHasSetName(true);
     }
 
-    const fetchMessages = async () => {
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .order("created_at", { ascending: true });
-      if (data) setMessages(data);
-    };
+  const fetchMessages = async () => {
+  const { data } = await supabase
+    .from("messages")
+    .select("*")
+    .order("created_at", { ascending: true }); // This keeps oldest at top, newest at bottom
+  if (data) setMessages(data);
+};
 
     fetchMessages();
 
