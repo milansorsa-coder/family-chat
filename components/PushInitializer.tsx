@@ -42,10 +42,10 @@ export default function PushInitializer() {
     }
   };
 
-  return (
+return (
   <button 
     onClick={subscribeUser}
-    className="fixed bottom-4 right-4 bg-blue-600 text-white p-3 rounded-full shadow-lg"
+    className="fixed top-4 right-4 bg-blue-600 text-white p-3 rounded-full shadow-lg z-50"
   >
     🔔 Link App
   </button>

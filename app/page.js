@@ -154,6 +154,18 @@ export default function FamilyChat() {
     return seenBy;
   };
 
+const subscribeToPush = async () => {
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: 'YOUR_PUBLIC_VAPID_KEY' 
+  });
+
+  await supabase.from('push_subscriptions').insert([
+    { user_name: userName, subscription_data: subscription }
+  ]);
+};
+
   // --- Screens ---
   if (!hasAuthorized) {
     return (

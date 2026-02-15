@@ -41,7 +41,9 @@ serve(async (req) => {
         console.error("Push failed for one user:", e.message)
       }
     })
-
+console.log("Total subs found:", subs?.length);
+console.log("Sender name:", record.user_name);
+console.log("VAPID Public Key being used:", Deno.env.get('VAPID_PUBLIC_KEY')?.substring(0, 10) + "...");
     await Promise.all(notifications)
 
     return new Response(JSON.stringify({ success: true }), { 
